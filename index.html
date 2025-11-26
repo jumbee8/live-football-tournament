@@ -115,6 +115,7 @@ if(!localStorage.getItem("foci_user_"+defaultAdmin.user)){
     localStorage.setItem("foci_user_"+defaultAdmin.user,defaultAdmin.pass);
 }
 
+// Auth
 function toggleLoginPanel(){document.getElementById("loginPanel").style.display=document.getElementById("loginPanel").style.display==="none"?"block":"none";}
 function doLogin(){const u=document.getElementById("authUser").value.trim(),p=document.getElementById("authPass").value,stored=localStorage.getItem("foci_user_"+u);if(stored&&stored===p){localStorage.setItem("foci_logged",u);currentUser=u;showAuthMsg("Belépve: "+u);applyAuthState()}else showAuthMsg("Hibás adatok.");}
 function doLogout(){localStorage.removeItem("foci_logged");currentUser=null;applyAuthState();}
@@ -122,17 +123,75 @@ function showAuthMsg(msg){document.getElementById("authMsg").innerText=msg;setTi
 function applyAuthState(){const ua=document.getElementById("userArea");const btnLogout=document.getElementById("btnLogout");if(localStorage.getItem("foci_logged")){currentUser=localStorage.getItem("foci_logged");ua.innerText="Bejelentkezve: "+currentUser;btnLogout.style.display="inline-block";document.getElementById("btnLogin").style.display="none";editMode=true;viewerOnly=false}else{currentUser=null;ua.innerText="Néző módban";btnLogout.style.display="none";document.getElementById("btnLogin").style.display="inline-block";editMode=false;viewerOnly=true;}renderViewer();}
 applyAuthState();
 
+// Admin check
 function requireAdmin(){if(!currentUser){alert("Csak admin szerkeszthet!");return false;}return true;}
 
+// Csapatok
 function addTeam(){if(!requireAdmin())return;const t=document.getElementById("newTeam").value.trim();if(!t)return alert("Írj be egy csapatnevet.");if(db.teams.includes(t))return alert("Ez a csapat már szerepel.");db.teams.push(t);refreshTeamsUI();saveState();}
 function loadTeamsFromTextarea(){if(!requireAdmin())return;const txt=document.getElementById("teamListArea").value.trim();if(!txt)return alert("Írj be csapatokat!");const items=txt.split(/\n|,/).map(s=>s.trim()).filter(Boolean);db.teams=items;refreshTeamsUI();saveState();}
 function exportTeamsToTextarea(){document.getElementById("teamListArea").value=db.teams.join(", ");}
 function clearTeams(){if(!requireAdmin())return;if(!confirm("Törölni szeretnéd az összes csapatot?"))return;db.teams=[];db.groups={};db.matches={};db.knockout=[];refreshTeamsUI();saveState();}
-function refreshTeamsUI(){document.getElementById("groupsContainer");exportTeamsToTextarea();}
+function shuffleTeams(){if(!requireAdmin())return;db.teams=db.teams.sort(()=>Math.random()-0.5);renderViewer();saveState();}
 
-// --- további csoportok, meccsek, kieséses szakasz, PDF export ---
-// (Az előző kód renderViewer, generateGroupsAuto, applyManualGroups, saveMatch, calcTable, exportPDF stb. részei ugyanúgy működnek)
+// Csoportok
+function updateGroupMode(){const mode=document.getElementById("groupMode").value;document.getElementById("autoOptions").style.display=mode==="auto"?"block":"none";document.getElementById("manualOptions").style.display=mode==="manual"?"block":"none";}
 
+function generateGroupsAuto(){if(!requireAdmin())return;if(db.teams.length<2)return alert("Adj meg legalább 2 csapatot.");const autoType=document.getElementById("autoType").value,num=parseInt(document.getElementById("autoNumber").value)||2;let groupCount=1;if(autoType==="byGroups"){groupCount=Math.max(1,Math.floor(num))}else{const size=Math.max(1,Math.floor(num));groupCount=Math.ceil(db.teams.length/size);}const groups={};for(let i=0;i<groupCount;i++)groups[String.fromCharCode(65+i)]=[];let idx=0;for(const t of db.teams){const gKey=String.fromCharCode(65+(idx%groupCount));groups[gKey].push(t);idx++;}const finalG={};Object.keys(groups).forEach(k=>finalG["Csoport "+k]=groups[k]);db.groups=finalG;db.matches={};db.knockout=[];saveState();renderViewer();}
+
+function applyManualGroups(){if(!requireAdmin())return;const txt=document.getElementById("manualGroups").value.trim();if(!txt)return alert("Írj be kézi csoportokat.");const lines=txt.split("\n");const g={};for(const line of lines){const parts=line.split(":");if(parts.length<2)continue;const name=parts[0].trim();const teams=parts[1].split(",").map(s=>s.trim()).filter(Boolean);if(teams.length)g[name]=teams;}db.groups=g;db.matches={};db.knockout=[];saveState();renderViewer();}
+
+// Meccsek és tabellák
+function ensureGroupMatches(){for(const g in db.groups){const arr=db.groups[g];for(let i=0;i<arr.length;i++){for(let j=i+1;j<arr.length;j++){const key=`${g}_${i}_${j}`;if(!db.matches[key])db.matches[key]=["",""]}}}}
+function saveMatch(g,i,j,h,v){if(!requireAdmin())return;const key=`${g}_${i}_${j}`;db.matches[key]=[String(h),String(v)];saveState();renderViewer();}
+function calcTable(gName){const teams=db.groups[gName]||[];const stats={};teams.forEach(t=>stats[t]={played:0,points:0,goalsFor:0,goalsAgainst:0,gd:0});for(let i=0;i<teams.length;i++){for(let j=i+1;j<teams.length;j++){const key=`${gName}_${i}_${j}`,sc=db.matches[key]||["",""],a=sc[0]===""?null:parseInt(sc[0],10),b=sc[1]===""?null:parseInt(sc[1],10);if(a===null||b===null)continue;const t1=teams[i],t2=teams[j];stats[t1].played++;stats[t2].played++;stats[t1].goalsFor+=a;stats[t1].goalsAgainst+=b;stats[t2].goalsFor+=b;stats[t2].goalsAgainst+=a;if(a>b){stats[t1].points+=3}else if(a<b){stats[t2].points+=3}else{stats[t1].points++;stats[t2].points++;}}}Object.keys(stats).forEach(t=>stats[t].gd=stats[t].goalsFor-stats[t].goalsAgainst);return stats;}
+
+// Viewer
+function renderViewer(){
+ensureGroupMatches();
+generateKnockoutIfNeeded();
+const container=document.getElementById("groupsContainer");
+container.innerHTML="";
+for(const g in db.groups){
+    const card=document.createElement("div");
+    card.style.background="rgba(255,255,255,0.02)";
+    card.style.padding="6px";
+    card.style.borderRadius="6px";
+    card.style.marginBottom="6px";
+    const teams=db.groups[g];
+    let html=`<h3>${g}</h3><table><thead><tr><th>Hazai</th><th></th><th>Vendég</th><th>Eredmény</th></tr></thead><tbody>`;
+    for(let i=0;i<teams.length;i++){for(let j=i+1;j<teams.length;j++){
+        const key=`${g}_${i}_${j}`,sc=db.matches[key]||["",""];
+        if(!viewerOnly){
+            html+=`<tr><td>${teams[i]}</td><td>vs</td><td>${teams[j]}</td><td><input type="number" min="0" value="${sc[0]}" style="width:48px;" oninput="saveMatch('${g}',${i},${j},this.value,document.getElementById('${key}_v')?.value||'')"> : <input type="number" min="0" value="${sc[1]}" style="width:48px;" oninput="saveMatch('${g}',${i},${j},document.getElementById('${key}_h')?.value||'',this.value)"></td></tr>`;
+        }else{
+            html+=`<tr><td>${teams[i]}</td><td>vs</td><td>${teams[j]}</td><td><input class="readonly" value="${sc[0]||''}" readonly> : <input class="readonly" value="${sc[1]||''}" readonly></td></tr>`;
+        }
+    }}
+    html+="</tbody></table>";
+    const stats=calcTable(g);
+    const rows=Object.keys(stats).map(t=>({team:t,...stats[t]}));
+    rows.sort((a,b)=>{if(b.points!==a.points)return b.points-a.points;if(b.gd!==a.gd)return b.gd-a.gd;return b.goalsFor-a.goalsFor;});
+    html+=`<h4>Tabella</h4><table><thead><tr><th>Csapat</th><th>P</th><th>Gy</th><th>D</th><th>V</th><th>GF</th><th>GA</th><th>GK</th></tr></thead><tbody>`;
+    for(const r of rows) html+=`<tr><td>${r.team}</td><td>${r.played}</td><td>${Math.floor(r.points/3)}</td><td>${r.points%3}</td><td>0</td><td>${r.goalsFor}</td><td>${r.goalsAgainst}</td><td>${r.gd}</td></tr>`;
+    html+="</tbody></table>";
+    container.appendChild(card);
+}
+
+// Kieséses szakasz
+const kArea=document.getElementById("knockoutArea");
+kArea.innerHTML="";
+for(const m of db.knockout){
+    kArea.innerHTML+=`<div style="margin-bottom:6px;">${m.team1} vs ${m.team2} : ${viewerOnly?m.score1+"-"+m.score2:`<input type="number" min="0" value="${m.score1}" style="width:48px;"> - <input type="number" min="0" value="${m.score2}" style="width:48px;">`}</div>`;
+}}
+
+function generateKnockoutIfNeeded(){db.knockout=[];if(!db.settings.autoAdvance)return;for(const g in db.groups){const teams=db.groups[g];const table=Object.keys(calcTable(g)).map(t=>({team:t,...calcTable(g)[t]}));table.sort((a,b)=>b.points-a.points);const top=table.slice(0,2);if(top.length===2)db.knockout.push({team1:top[0].team,team2:top[1].team,score1:"",score2:""});}}
+
+function exportCSV(){let csv="";for(const g in db.groups){csv+=g+"\n";const teams=db.groups[g];for(let i=0;i<teams.length;i++){for(let j=i+1;j<teams.length;j++){const key=`${g}_${i}_${j}`;const sc=db.matches[key]||["",""];csv+=`${teams[i]} vs ${teams[j]} : ${sc[0]}-${sc[1]}\n`;}}csv+="\n";}downloadFile("torna.csv",csv);}
+function exportPDF(){html2canvas(document.getElementById("workspace")).then(canvas=>{const imgData=canvas.toDataURL("image/png");const { jsPDF } = window.jspdf;const pdf=new jsPDF('p','mm','a4');const w=210,h=canvas.height*210/canvas.width;pdf.addImage(imgData,'PNG',0,0,w,h);pdf.save("torna.pdf");});}
+function downloadFile(filename,text){const a=document.createElement("a");a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(text);a.download=filename;a.click();}
+function saveState(){localStorage.setItem("foci_db",JSON.stringify(db));}
+function loadState(){const st=localStorage.getItem("foci_db");if(st)db=JSON.parse(st);}loadState();
+renderViewer();
 </script>
 </body>
 </html>
