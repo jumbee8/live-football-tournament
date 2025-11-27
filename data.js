@@ -1,19 +1,26 @@
 // ----------------------
 // ADATBÁZIS
 // ----------------------
-let DB = {
-    tournaments: []
-};
+let DB = { tournaments: [] };
+
+function loadDB() {
+    let raw = localStorage.getItem("torna_db");
+    if(raw){
+        try { 
+            DB = JSON.parse(raw); 
+        }
+        catch(e) { 
+            console.log("Hibás localStorage adat, újra inicializálva."); 
+            DB = { tournaments: [] }; 
+        }
+    }
+    DB.tournaments = DB.tournaments || [];
+}
+loadDB();
 
 function saveDB() {
     localStorage.setItem("torna_db", JSON.stringify(DB));
 }
-
-function loadDB() {
-    let raw = localStorage.getItem("torna_db");
-    if (raw) DB = JSON.parse(raw);
-}
-loadDB();
 
 // ----------------------
 // TORNA KEZELÉS
