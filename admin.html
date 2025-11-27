@@ -12,11 +12,13 @@ input, button, select { padding: 8px; margin: 5px; }
 <body>
 <div class="box">
 <h1>Admin felület</h1>
+
 <div id="loginSection">
 <h3>Bejelentkezés</h3>
 <input id="login_user" placeholder="Felhasználónév"><br>
 <input id="login_pass" type="password" placeholder="Jelszó"><br>
 <button onclick="handleLogin()">Belépés</button>
+
 <h3>Regisztráció</h3>
 <input id="reg_user" placeholder="Új felhasználó"><br>
 <input id="reg_pass" type="password" placeholder="Új jelszó"><br>
@@ -25,6 +27,7 @@ input, button, select { padding: 8px; margin: 5px; }
 
 <div id="adminPanel" style="display:none;">
 <button onclick="logout()">Kijelentkezés</button>
+
 <h2>Tornák kezelése</h2>
 <input id="tournamentName" placeholder="Torna neve">
 <button onclick="addTournament(document.getElementById('tournamentName').value)">Torna létrehozása</button>
@@ -34,15 +37,14 @@ input, button, select { padding: 8px; margin: 5px; }
 <input id="teamName" placeholder="Csapat neve">
 <button onclick="addTeam()">Hozzáadás</button>
 
-<h2>Csoportok generálása</h2>
+<h2>Csoportok kezelése</h2>
 <input id="teamPerGroup" type="number" placeholder="Hány csapat / csoport">
-<button onclick="createGroups()">Generálás</button>
+<button onclick="createGroups()">Automatikus generálás</button>
+<button onclick="manualGroupSetup()">Kézi csoportok szerkesztése</button>
+<div id="manualGroups"></div>
 
 <h2>Eredmény rögzítése</h2>
-<select id="matchSelect"></select><br>
-<input id="scoreA" placeholder="Hazai">
-<input id="scoreB" placeholder="Vendég">
-<button onclick="saveResult()">Eredmény mentése</button>
+<div id="matchList"></div>
 
 <h2>Kieséses szakasz és dobogó</h2>
 <input id="advanceCount" type="number" placeholder="Hány jut tovább a csoportból">
@@ -61,9 +63,11 @@ function updateAdminView() {
         document.getElementById("loginSection").style.display="none";
         document.getElementById("adminPanel").style.display="block";
         renderTournamentList();
+        fillMatchList();
     }
 }
 updateAdminView();
+
 function logout(){logoutUser(); location.reload();}
 function handleRegister(){let u=reg_user.value,p=reg_pass.value,r=registerUser(u,p);alert(r==="OK"?"Sikeres regisztráció!":r);}
 function handleLogin(){let u=login_user.value,p=login_pass.value,r=loginUser(u,p);if(r==="OK") updateAdminView();else alert(r);}
