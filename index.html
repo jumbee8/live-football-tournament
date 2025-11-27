@@ -1,166 +1,50 @@
 <!DOCTYPE html>
 <html lang="hu">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Focitorna — Eredmények (Nézői oldal)</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="data.js"></script>
+<meta charset="UTF-8">
+<title>Focitorna – Eredmények</title>
 <style>
-  body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#fff;
-    background:
-      linear-gradient(rgba(0,0,0,0.45),rgba(0,0,0,0.45)),
-      url('https://upload.wikimedia.org/wikipedia/commons/c/c1/Flag_of_Hungary.svg') center/cover no-repeat;
-    -webkit-font-smoothing:antialiased;}
-  header{padding:14px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-  h1{margin:0;font-size:18px;text-shadow:1px 1px 6px rgba(0,0,0,0.6)}
-  .controls{display:flex;gap:8px;align-items:center}
-  button{background:#2b8a3e;border:none;padding:8px 10px;border-radius:6px;color:#fff;cursor:pointer}
-  main{max-width:1100px;margin:12px auto;padding:12px}
-  .groups{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
-  .card{background:rgba(0,0,0,0.45);padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,0.05)}
-  table{width:100%;border-collapse:collapse;color:#fff;font-size:13px;margin-top:8px}
-  th,td{padding:6px;border:1px solid rgba(255,255,255,0.06);text-align:center}
-  th{background:rgba(255,255,255,0.03)}
-  input.readonly{border:none;background:transparent;color:#fff;width:48px;text-align:center}
-  @media(max-width:900px){header{flex-direction:column;align-items:flex-start} .groups{grid-template-columns:1fr}}
-  footer{color:rgba(255,255,255,0.7);text-align:center;padding:12px;font-size:13px}
+body {
+    font-family: Arial;
+    background: linear-gradient(rgba(255,255,255,0.8), rgba(255,255,255,0.8)), 
+                url('https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Flag_of_Hungary.svg/2560px-Flag_of_Hungary.svg.png');
+    background-size: cover;
+}
+.container {
+    max-width: 900px;
+    margin: auto;
+    background: white;
+    padding: 20px;
+    border-radius: 10px;
+}
+.group, .match {
+    padding: 10px;
+    border: 1px solid #aaa;
+    margin: 10px 0;
+    border-radius: 5px;
+}
 </style>
 </head>
+
 <body>
-<header>
-  <h1>Focitorna — Élő eredmények</h1>
-  <div class="controls">
-    <a href="admin.html" style="color:white;text-decoration:none;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.06)">Admin belépés</a>
-    <button id="btnPDF">PDF export</button>
-  </div>
-</header>
+<div class="container">
+    <h1>Focitorna – Csoportok és Eredmények</h1>
 
-<main>
-  <section id="liveArea">
-    <div id="lastUpdated" style="color:#ddd;font-size:13px;margin-bottom:8px">Betöltés...</div>
-    <div id="groupsContainer" class="groups"></div>
+    <div id="groupDisplay"></div>
+    <div id="matchDisplay"></div>
 
-    <h2 style="margin-top:16px">Kieséses szakasz</h2>
-    <div id="knockoutArea"></div>
-  </section>
-</main>
+    <hr>
+    <a href="admin.html">Admin belépés</a>
+</div>
 
-<footer>© Focitorna — Nézői megjelenítés (localStorage-alapú)</footer>
+<script src="login.js"></script>
+<script src="data.js"></script>
 
 <script>
-/* ======= Nézői oldal — read-only, figyeli localStorage változásokat ======= */
-
-function loadDB(){
-  const s = localStorage.getItem('foci_db');
-  if(!s) return {teams:[],groups:{},matches:{},knockout:[],settings:{autoAdvance:true},meta:{updated: null}};
-  try{ return JSON.parse(s); } catch(e){ return {teams:[],groups:{},matches:{},knockout:[],settings:{autoAdvance:true},meta:{updated: null}}; }
-}
-
-function render(){
-  const db = loadDB();
-  document.getElementById('lastUpdated').textContent = db.meta && db.meta.updated ? 'Utolsó mentés: ' + new Date(db.meta.updated).toLocaleString() : 'Nincs mentett adat';
-  const groupsContainer = document.getElementById('groupsContainer');
-  groupsContainer.innerHTML = '';
-
-  const groups = db.groups || {};
-  const matches = db.matches || {};
-
-  // render each group card
-  for(const gName of Object.keys(groups)){
-    const teams = groups[gName];
-    const card = document.createElement('div');
-    card.className = 'card';
-    let html = `<h3 style="margin:6px 0">${gName}</h3>`;
-    html += `<table><thead><tr><th>Hazai</th><th></th><th>Vendég</th><th>Eredmény</th></tr></thead><tbody>`;
-    for(let i=0;i<teams.length;i++){
-      for(let j=i+1;j<teams.length;j++){
-        const key = `${gName}_${i}_${j}`;
-        const sc = (matches[key] || ["",""]);
-        html += `<tr><td>${teams[i]}</td><td>vs</td><td>${teams[j]}</td><td><input class="readonly" readonly value="${sc[0]||''}"> : <input class="readonly" readonly value="${sc[1]||''}"></td></tr>`;
-      }
-    }
-    html += `</tbody></table>`;
-
-    // standings
-    const stats = calcTableForViewer(gName, db);
-    html += `<h4 style="margin:8px 0 6px 0">Tabella</h4>`;
-    html += `<table><thead><tr><th>Hely</th><th>Csapat</th><th>P</th><th>GF</th><th>GA</th><th>GD</th></tr></thead><tbody>`;
-    for(let k=0;k<stats.length;k++){
-      const r = stats[k];
-      html += `<tr><td>${k+1}</td><td>${r.team}</td><td>${r.points}</td><td>${r.goalsFor}</td><td>${r.goalsAgainst}</td><td>${r.gd}</td></tr>`;
-    }
-    html += `</tbody></table>`;
-    card.innerHTML = html;
-    groupsContainer.appendChild(card);
-  }
-
-  // knockout
-  const koArea = document.getElementById('knockoutArea');
-  koArea.innerHTML = '';
-  const ko = db.knockout || [];
-  if(ko.length===0){
-    koArea.innerHTML = '<div style="color:#ddd">Nincs kieséses szakasz kisorsolva.</div>';
-  } else {
-    let html = '';
-    ko.forEach((m,idx)=>{
-      html += `<div class="card" style="margin-bottom:8px"><strong>Elődöntő ${idx+1}</strong><div style="margin-top:6px">${m.team1} vs ${m.team2}</div><div style="margin-top:6px"><input class="readonly" readonly value="${m.score1||''}"> : <input class="readonly" readonly value="${m.score2||''}"></div></div>`;
-    });
-    if(db.final){
-      html += `<div class="card"><h4>Döntő</h4><div>${db.final.final ? db.final.final[0] + ' vs ' + db.final.final[1] : ''}</div><h4 style="margin-top:8px">3. hely</h4><div>${db.final.third ? db.final.third[0] + ' vs ' + db.final.third[1] : ''}</div></div>`;
-    }
-    koArea.innerHTML = html;
-  }
-}
-
-// helper to calculate table for viewer (simple)
-function calcTableForViewer(gName, db){
-  const teams = (db.groups && db.groups[gName]) || [];
-  const matches = db.matches || {};
-  const stats = {};
-  teams.forEach(t => stats[t] = {team:t,points:0,goalsFor:0,goalsAgainst:0,gd:0});
-  for(let i=0;i<teams.length;i++){
-    for(let j=i+1;j<teams.length;j++){
-      const key = `${gName}_${i}_${j}`;
-      const sc = matches[key] || ["",""];
-      const a = sc[0]==="" ? null : parseInt(sc[0],10);
-      const b = sc[1]==="" ? null : parseInt(sc[1],10);
-      if(a===null || b===null) continue;
-      const t1 = teams[i], t2 = teams[j];
-      stats[t1].goalsFor += a; stats[t1].goalsAgainst += b;
-      stats[t2].goalsFor += b; stats[t2].goalsAgainst += a;
-      if(a > b) stats[t1].points += 3;
-      else if(a < b) stats[t2].points += 3;
-      else { stats[t1].points += 1; stats[t2].points += 1; }
-    }
-  }
-  Object.keys(stats).forEach(k => stats[k].gd = stats[k].goalsFor - stats[k].goalsAgainst);
-  const arr = Object.values(stats);
-  arr.sort((A,B) => { if(B.points!==A.points) return B.points-A.points; if(B.gd!==A.gd) return B.gd-A.gd; return B.goalsFor-A.goalsFor; });
-  return arr;
-}
-
-// storage listener -> automatikus frissítés ha admin ment
-window.addEventListener('storage', function(e){
-  if(e.key === 'foci_db') render();
-});
-
-// initial render
-render();
-
-// PDF export
-document.getElementById('btnPDF').addEventListener('click', async ()=>{
-  const area = document.getElementById('liveArea');
-  const canvas = await html2canvas(area, {scale:2, useCORS:true});
-  const img = canvas.toDataURL('image/png');
-  const { jsPDF } = window.jspdf;
-  const pdf = new jsPDF({orientation:'portrait'});
-  const w = pdf.internal.pageSize.getWidth();
-  const h = canvas.height * (w / canvas.width);
-  pdf.addImage(img,'PNG',0,0,w,h);
-  pdf.save('focitorna_eredmenyek.pdf');
-});
+// ---- NÉZŐI OLDAL – csak megjelenítés ----
+renderGroups();
+renderMatches();
 </script>
+
 </body>
 </html>
