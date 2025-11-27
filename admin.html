@@ -9,7 +9,6 @@ body { font-family: Arial; background: #eee; }
 input, button { padding: 8px; margin: 5px; }
 </style>
 </head>
-
 <body>
 
 <div class="box">
@@ -29,6 +28,11 @@ input, button { padding: 8px; margin: 5px; }
 
     <div id="adminPanel" style="display:none;">
         <button onclick="logout()">Kijelentkezés</button>
+
+        <h2>Tornák kezelése</h2>
+        <input id="tournamentName" placeholder="Torna neve">
+        <button onclick="addTournament(document.getElementById('tournamentName').value)">Torna létrehozása</button>
+        <div id="tournamentList"></div>
 
         <h2>Csapatok felvitele</h2>
         <input id="teamName" placeholder="Csapat neve">
@@ -51,38 +55,27 @@ input, button { padding: 8px; margin: 5px; }
 
 <script src="login.js"></script>
 <script src="data.js"></script>
-
 <script>
-// --- Bejelentkezés kezelése ---
 function updateAdminView() {
     if (getLoggedInUser()) {
         document.getElementById("loginSection").style.display = "none";
         document.getElementById("adminPanel").style.display = "block";
-        fillMatchList();
+        renderTournamentList();
     }
 }
 updateAdminView();
 
-function logout() {
-    logoutUser();
-    location.reload();
-}
-
+function logout() { logoutUser(); location.reload(); }
 function handleRegister() {
-    let u = reg_user.value;
-    let p = reg_pass.value;
-    let r = registerUser(u, p);
-    alert(r === "OK" ? "Sikeres regisztráció!" : r);
+    let u = reg_user.value, p = reg_pass.value;
+    let r = registerUser(u,p);
+    alert(r==="OK"?"Sikeres regisztráció!":r);
 }
-
 function handleLogin() {
-    let u = login_user.value;
-    let p = login_pass.value;
-    let r = loginUser(u, p);
-    if (r === "OK") updateAdminView();
-    else alert(r);
+    let u = login_user.value, p = login_pass.value;
+    let r = loginUser(u,p);
+    if(r==="OK") updateAdminView(); else alert(r);
 }
 </script>
-
 </body>
 </html>
