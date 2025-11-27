@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Focitorna — Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="data.js"></script>
+<style>
+  body{margin:0;font-family:Arial,Helvetica,sans-serif;color:#fff;
+    background:linear-gradient(rgba(0,0,0,0.45),rgba(0,0,0,0.45)), url('https://upload.wikimedia.org/wikipedia/commons/c/c1/Flag_of_Hungary.svg') center/cover no-repeat;}
+  header{padding:14px;display:flex;align-items:center;justify-content:space-between}
+  h1{margin:0;font-size:18px}
+  a{color:white;text-decoration:none;padding:6px 8px;border-radius:6px;background:rgba(255,255,255,0.06)}
+  main{max-width:1200px;margin:12px auto;padding:12px;display:grid;grid-template-columns:360px 1fr;gap:12px}
+  .panel{background:rgba(0,0,0,0.5);padding:12px;border-radius:8px}
+  label{font-size:13px;color:#ddd}
+  input, textarea, select{width:100%;padding:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.08);background:transparent;color:#fff;margin-top:6px;box-sizing:border-box}
+  button{background:#2b8a3e;border:none;padding:8px 10px;border-radius:6px;color:#fff;cursor:pointer;margin-top:8px}
+  button.secondary{background:rgba(255,255,255,0.08)}
+  .groups-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  table{width:100%;border-collapse:collapse;color:#fff;margin-top:8px;font-size:13px}
+  th,td{border:1px solid rgba(255,255,255,0.06);padding:6px;text-align:center}
+  .readonly{border:none;background:transparent;color:#fff;width:48px;text-align:center}
+  @media(max-width:900px){main{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Focitorna — Admin szerkesztő</h1>
+  <div>
+    <a href="index.html">Főoldal (néző)</a>
+  </div>
+</header>
+
+<main>
+  <aside class="panel">
+    <h3>Belépés / Regisztráció</h3>
+    <label>Felhasználónév</label><input id="user" type="text" placeholder="felhasználó">
+    <label>Jelszó</label><input id="pass" type="password" placeholder="jelszó">
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button id="btnRegister">Regisztráció</button>
+      <button id="btnLogin">Belépés</button>
+      <button id="btnLogout" style="display:none" class="secondary">Kijelentkezés</button>
+    </div>
+    <div id="authMsg" style="color:#ddd;margin-top:8px;font-size:13px"></div>
+
+    <hr style="border:none;height:1px;background:rgba(255,255,255,0.06);margin:12px 0">
+
+    <h3>Csapatok</h3>
+    <label>Új csapat</label><input id="newTeam" type="text" placeholder="Csapat neve">
+    <button id="btnAddTeam">Hozzáad</button>
+
+    <label style="margin-top:10px">Csapatlista (sorrend számít)</label>
+    <textarea id="teamListArea" rows="5" placeholder="Csapat1, Csapat2, ..."></textarea>
+    <div style="display:flex;gap:8px;margin-top:6px">
+      <button id="btnImport">Importál</button>
+      <button id="btnExportTeams" class="secondary">Feltöltés előnézet</button>
+      <button id="btnClear" class="secondary">Töröl</button>
+    </div>
+
+    <hr style="border:none;height:1px;background:rgba(255,255,255,0.06);margin:12px 0">
+
+    <h3>Csoportképzés</h3>
+    <label>Mód</label>
+    <select id="modeSelect"><option value="auto">Automatikus</option><option value="manual">Kézi</option></select>
+    <div id="autoBox" style="margin-top:8px">
+      <label>Megadod a csoportok számát vagy csapat/csoport</label>
+      <select id="autoType"><option value="byGroups">Csoportok száma</option><option value="bySize">Csapat/csoport</option></select>
+      <input id="autoNumber" type="number" min="1" value="2">
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button id="btnGenGroups">Csoportok létrehozása</button>
+        <button id="btnShuffle" class="secondary">Megkever</button>
+      </div>
+    </div>
+    <div id="manualBox" style="display:none;margin-top:8px">
+      <label>Kézi csoport (A:Cs1,Cs2)</label>
+      <textarea id="manualGroups" rows="4"></textarea>
+      <button id="btnApplyManual">Alkalmaz</button>
+    </div>
+
+    <div style="margin-top:12px">
+      <label><input id="autoAdvance" type="checkbox" checked> Az első 2 automatikusan továbbjut</label>
+    </div>
+
+    <hr style="border:none;height:1px;background:rgba(255,255,255,0.06);margin:12px 0">
+
+    <h3>Export</h3>
+    <button id="btnCSV">Export CSV</button>
+    <button id="btnPDF">Export PDF</button>
+  </aside>
+
+  <section class="panel" id="mainPanel">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div id="status" style="color:#ddd">Nézői mód — lépj be szerkesztéshez</div>
+      <div><button id="btnSave" class="secondary">Mentés</button></div>
+    </div>
+
+    <div id="editorArea" style="margin-top:12px">
+      <h2>Csoportok és meccsek</h2>
+      <div id="groupsGrid" class="groups-grid"></div>
+
+      <h2 style="margin-top:12px">Kieséses szakasz</h2>
+      <div id="knockoutArea"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ===== Shared DB shape in localStorage: key 'foci_db' =====
+ { teams: [], groups: { "Csoport A": [...], ... }, matches: { "Csoport A_0_1": ["1","0"] }, knockout: [...], final:{final:[..],third:[..]}, settings:{autoAdvance:true}, meta:{updated:timestamp} }
+*/
+
+const STORAGE_KEY = 'foci_db';
+
+// ensure default admin exists
+if(!localStorage.getItem('foci_user_admin')) localStorage.setItem('foci_user_admin','admin123');
+
+function loadDB(){ const s = localStorage.getItem(STORAGE_KEY); if(!s) return {teams:[],groups:{},matches:{},knockout:[],final:null,settings:{autoAdvance:true},meta:{updated:null}}; try{return JSON.parse(s);}catch(e){return {teams:[],groups:{},matches:{},knockout:[],final:null,settings:{autoAdvance:true},meta:{updated:null}};} }
+function saveDB(db){ db.meta = db.meta || {}; db.meta.updated = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(db)); window.dispatchEvent(new Event('storage')); } // dispatch storage to notify other tabs
+
+let db = loadDB();
+let currentUser = localStorage.getItem('foci_logged') || null;
+let editing = false;
+
+// AUTH handlers
+document.getElementById('btnRegister').addEventListener('click', ()=>{
+  const u = document.getElementById('user').value.trim();
+  const p = document.getElementById('pass').value;
+  if(u.length<3 || p.length<3){ showAuth('Legalább 3 karakter.'); return; }
+  if(localStorage.getItem('foci_user_'+u)){ showAuth('A felhasználó már létezik.'); return; }
+  localStorage.setItem('foci_user_'+u, p); showAuth('Regisztráció sikeres. Jelentkezz be.'); 
+});
+document.getElementById('btnLogin').addEventListener('click', ()=>{
+  const u = document.getElementById('user').value.trim();
+  const p = document.getElementById('pass').value;
+  const stored = localStorage.getItem('foci_user_'+u);
+  if(stored && stored === p){ localStorage.setItem('foci_logged', u); currentUser = u; showAuth('Belépve: '+u); applyAuthState(); } else showAuth('Hibás adatok'); 
+});
+document.getElementById('btnLogout').addEventListener('click', ()=>{ localStorage.removeItem('foci_logged'); currentUser = null; applyAuthState(); });
+
+function showAuth(msg){ document.getElementById('authMsg').innerText = msg; setTimeout(()=>document.getElementById('authMsg').innerText='',3000); }
+function applyAuthState(){
+  if(localStorage.getItem('foci_logged')){ currentUser = localStorage.getItem('foci_logged'); document.getElementById('btnLogout').style.display='inline-block'; document.getElementById('btnLogin').style.display='none'; document.getElementById('btnRegister').style.display='none'; document.getElementById('status').innerText = 'Admin: '+currentUser+' — szerkeszthető'; editing = true; } else { currentUser = null; document.getElementById('btnLogout').style.display='none'; document.getElementById('btnLogin').style.display='inline-block'; document.getElementById('btnRegister').style.display='inline-block'; document.getElementById('status').innerText = 'Nézői mód — lépj be szerkesztéshez'; editing = false; }
+  renderEditor();
+}
+applyAuthState();
+
+// Teams UI
+document.getElementById('btnAddTeam').addEventListener('click', ()=>{
+  if(!requireAuth()) return;
+  const t = document.getElementById('newTeam').value.trim(); if(!t) return alert('Adj meg csapatot'); if(db.teams.includes(t)) return alert('Már benne'); db.teams.push(t); renderEditor(); saveDB(db);
+});
+document.getElementById('btnImport').addEventListener('click', ()=>{
+  if(!requireAuth()) return;
+  const txt = document.getElementById('teamListArea').value.trim(); if(!txt) return alert('Adj meg csapatlistát'); const items = txt.split(/\n|,/).map(s=>s.trim()).filter(Boolean); db.teams = items; renderEditor(); saveDB(db);
+});
+document.getElementById('btnExportTeams').addEventListener('click', ()=>{ document.getElementById('teamListArea').value = db.teams.join(', '); });
+document.getElementById('btnClear').addEventListener('click', ()=>{ if(!requireAuth()) return; if(!confirm('Törlöd az összes adatot?')) return; db = {teams:[],groups:{},matches:{},knockout:[],final:null,settings:{autoAdvance:true},meta:{updated:null}}; saveDB(db); renderEditor(); });
+
+// Group generation
+document.getElementById('modeSelect').addEventListener('change', ()=>{
+  const mode = document.getElementById('modeSelect').value;
+  document.getElementById('autoBox').style.display = mode==='auto' ? 'block':'none';
+  document.getElementById('manualBox').style.display = mode==='manual' ? 'block':'none';
+});
+document.getElementById('btnShuffle').addEventListener('click', ()=>{ if(!requireAuth()) return; db.teams = db.teams.sort(()=>Math.random()-0.5); renderEditor(); saveDB(db);});
+document.getElementById('btnGenGroups').addEventListener('click', ()=>{ if(!requireAuth()) return; if(db.teams.length<2) return alert('Adj meg legalább 2 csapatot'); const type = document.getElementById('autoType').value; const num = Math.max(1, parseInt(document.getElementById('autoNumber').value) || 2); let groupCount = 1; if(type==='byGroups') groupCount = num; else groupCount = Math.ceil(db.teams.length/num); const tmp = {}; for(let i=0;i<groupCount;i++) tmp[String.fromCharCode(65+i)] = []; let idx=0; for(const t of db.teams){ tmp[String.fromCharCode(65 + (idx % groupCount))].push(t); idx++; } const finalG={}; Object.keys(tmp).forEach(k=> finalG['Csoport '+k] = tmp[k]); db.groups = finalG; db.matches = {}; db.knockout = []; saveDB(db); renderEditor();});
+document.getElementById('btnApplyManual').addEventListener('click', ()=>{ if(!requireAuth()) return; const txt=document.getElementById('manualGroups').value.trim(); if(!txt) return alert('Adj kézi csoportot'); const lines = txt.split("\n"); const g={}; for(const line of lines){ const parts=line.split(':'); if(parts.length<2) continue; const name=parts[0].trim(); const teams = parts[1].split(',').map(s=>s.trim()).filter(Boolean); if(teams.length) g[name]=teams; } db.groups = g; db.matches={}; db.knockout=[]; saveDB(db); renderEditor();});
+
+// matches helpers
+function ensureMatches(){
+  db.matches = db.matches || {};
+  for(const g in db.groups){
+    const arr = db.groups[g];
+    for(let i=0;i<arr.length;i++){
+      for(let j=i+1;j<arr.length;j++){
+        const key = `${g}_${i}_${j}`;
+        if(!db.matches[key]) db.matches[key] = ["",""];
+      }
+    }
+  }
+}
+
+// render editor and viewer
+function renderEditor(){
+  ensureMatches();
+  const grid = document.getElementById('groupsGrid'); grid.innerHTML='';
+
+  // show teams list preview
+  document.getElementById('teamListArea').value = db.teams.join(', ');
+
+  for(const gName of Object.keys(db.groups)){
+    const teams = db.groups[gName];
+    const div = document.createElement('div'); div.style.background='rgba(255,255,255,0.02)'; div.style.padding='8px'; div.style.borderRadius='6px';
+    let html = `<h3 style="margin:6px 0">${gName}</h3>`;
+    html += `<table><thead><tr><th>Hazai</th><th></th><th>Vendég</th><th>Eredmény</th></tr></thead><tbody>`;
+    for(let i=0;i<teams.length;i++){
+      for(let j=i+1;j<teams.length;j++){
+        const key = `${gName}_${i}_${j}`; const sc = db.matches[key] || ["",""];
+        if(editing){
+          html += `<tr><td>${teams[i]}</td><td>vs</td><td>${teams[j]}</td><td><input style="width:56px" type="number" min="0" value="${sc[0]||''}" onchange="onMatchChange('${gName}',${i},${j},this.value,document.getElementById('${encodeKey(key)}_v').value)" id="${encodeKey(key)}_h"> : <input style="width:56px" type="number" min="0" value="${sc[1]||''}" onchange="onMatchChange('${gName}',${i},${j},document.getElementById('${encodeKey(key)}_h').value,this.value)" id="${encodeKey(key)}_v"></td></tr>`;
+        } else {
+          html += `<tr><td>${teams[i]}</td><td>vs</td><td>${teams[j]}</td><td><input class="readonly" readonly value="${sc[0]||''}"> : <input class="readonly" readonly value="${sc[1]||''}"></td></tr>`;
+        }
+      }
+    }
+    html += `</tbody></table>`;
+    // table
+    const stats = calcTable(gName);
+    html += `<h4 style="margin-top:8px">Tabella</h4>`;
+    html += `<table><thead><tr><th>Hely</th><th>Csapat</th><th>P</th><th>GF</th><th>GA</th><th>GD</th></tr></thead><tbody>`;
+    for(let k=0;k<stats.length;k++){ const r = stats[k]; html += `<tr><td>${k+1}</td><td>${r.team}</td><td>${r.points}</td><td>${r.goalsFor}</td><td>${r.goalsAgainst}</td><td>${r.gd}</td></tr>`; }
+    html += `</tbody></table>`;
+    div.innerHTML = html;
+    grid.appendChild(div);
+  }
+
+  renderKnockout();
+}
+
+// helpers
+function encodeKey(k){ return 'K_'+k.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'_'); }
+
+function onMatchChange(g,i,j,h,v){
+  const key = `${g}_${i}_${j}`;
+  db.matches[key] = [String(h||''), String(v||'')];
+  saveDB(db);
+  renderEditor();
+}
+
+// table calc
+function calcTable(gName){
+  const teams = db.groups[gName] || [];
+  const stats = {};
+  teams.forEach(t => stats[t] = {team:t,points:0,goalsFor:0,goalsAgainst:0,gd:0});
+  for(let i=0;i<teams.length;i++){
+    for(let j=i+1;j<teams.length;j++){
+      const key = `${gName}_${i}_${j}`; const sc = db.matches[key] || ["",""]; const a = sc[0]===""?null:parseInt(sc[0],10); const b = sc[1]===""?null:parseInt(sc[1],10);
+      if(a===null || b===null) continue;
+      const t1 = teams[i], t2 = teams[j];
+      stats[t1].goalsFor += a; stats[t1].goalsAgainst += b; stats[t2].goalsFor += b; stats[t2].goalsAgainst += a;
+      if(a>b) stats[t1].points += 3; else if(a<b) stats[t2].points += 3; else { stats[t1].points += 1; stats[t2].points += 1; }
+    }
+  }
+  Object.keys(stats).forEach(k => stats[k].gd = stats[k].goalsFor - stats[k].goalsAgainst);
+  const arr = Object.values(stats);
+  arr.sort((A,B)=>{ if(B.points!==A.points) return B.points-A.points; if(B.gd!==A.gd) return B.gd-A.gd; return B.goalsFor-A.goalsFor;});
+  return arr;
+}
+
+// knockout generation & render
+function generateKnockout(){
+  db.knockout = [];
+  if(!document.getElementById('autoAdvance').checked) return;
+  const adv = [];
+  for(const g in db.groups){
+    const stats = calcTable(g);
+    if(stats[0]) adv.push(stats[0].team);
+    if(stats[1]) adv.push(stats[1].team);
+  }
+  if(adv.length < 4) return;
+  db.knockout = [{team1:adv[0],team2:adv[3],score1:'',score2:''},{team1:adv[2],team2:adv[1],score1:'',score2:''}];
+  saveDB(db);
+  renderKnockout();
+}
+
+function renderKnockout(){
+  generateKnockout(); // ensure up to date
+  const area = document.getElementById('knockoutArea'); area.innerHTML = '';
+  if(!db.knockout || db.knockout.length===0){ area.innerHTML = '<div style="color:#ddd">Nincs kieséses szakasz</div>'; return; }
+  db.knockout.forEach((m,idx)=>{
+    const div = document.createElement('div'); div.style.background='rgba(255,255,255,0.02)'; div.style.padding='8px'; div.style.marginBottom='8px'; div.style.borderRadius='6px';
+    let inner = `<strong>Elődöntő ${idx+1}</strong><div style="margin-top:6px">${m.team1} vs ${m.team2}</div>`;
+    if(editing){
+      inner += `<div style="margin-top:6px"><input id="ko_${idx}_1" style="width:56px" type="number" min="0" value="${m.score1||''}"> : <input id="ko_${idx}_2" style="width:56px" type="number" min="0" value="${m.score2||''}"></div>
+                <div style="margin-top:6px"><button onclick="applyKOResults()">Eredmények rögzítése</button></div>`;
+    } else {
+      inner += `<div style="margin-top:6px"><input class="readonly" readonly value="${m.score1||''}"> : <input class="readonly" readonly value="${m.score2||''}"></div>`;
+    }
+    div.innerHTML = inner; area.appendChild(div);
+  });
+  // final if exists
+  if(db.final && db.final.final){
+    const f = document.createElement('div'); f.style.background='rgba(255,255,255,0.02)'; f.style.padding='8px'; f.style.borderRadius='6px';
+    f.innerHTML = `<h4>Döntő</h4><div>${db.final.final[0]} vs ${db.final.final[1]}</div><h4 style="margin-top:8px">3. hely</h4><div>${db.final.third[0]} vs ${db.final.third[1]}</div>`;
+    area.appendChild(f);
+  }
+}
+
+// apply knockout results, create final & third
+function applyKOResults(){
+  if(!requireAuth()) return;
+  const results = db.knockout.map((m,idx)=>{
+    const a = document.getElementById(`ko_${idx}_1`).value;
+    const b = document.getElementById(`ko_${idx}_2`).value;
+    return {team1:m.team1,team2:m.team2,s1:a===''?null:parseInt(a,10),s2:b===''?null:parseInt(b,10)};
+  });
+  if(results.some(r=>r.s1===null||r.s2===null)) return alert('Töltsd ki az elődöntő eredményeit');
+  const winners = results.map(r=> r.s1>r.s2 ? r.team1 : r.team2);
+  const losers = results.map(r=> r.s1>r.s2 ? r.team2 : r.team1);
+  db.final = { final: winners, third: losers };
+  saveDB(db);
+  renderKnockout();
+  renderEditor();
+}
+
+// CSV / PDF exports
+document.getElementById('btnCSV').addEventListener('click', ()=>{ const csv=[]; for(const g in db.groups){ csv.push(g); const teams = db.groups[g]; for(let i=0;i<teams.length;i++){ for(let j=i+1;j<teams.length;j++){ const key=`${g}_${i}_${j}`; const sc = db.matches[key]||['','']; csv.push(`${teams[i]} vs ${teams[j]} : ${sc[0]}-${sc[1]}`); } } csv.push(''); } downloadFile('torna.csv', csv.join('\n')); });
+document.getElementById('btnPDF').addEventListener('click', ()=>{ html2canvas(document.getElementById('mainPanel')).then(canvas=>{ const img = canvas.toDataURL('image/png'); const { jsPDF } = window.jspdf; const pdf = new jsPDF('p','mm','a4'); const w = 210; const h = canvas.height * w / canvas.width; pdf.addImage(img,'PNG',0,0,w,h); pdf.save('torna_admin.pdf'); }); });
+
+// Save and helper
+document.getElementById('btnSave').addEventListener('click', ()=>{ saveDB(db); alert('Mentve'); });
+
+function saveDB(d){ d.meta = d.meta || {}; d.meta.updated = Date.now(); localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); // notify other tabs
+  // dispatch storage event fallback
+  window.dispatchEvent(new Event('storage')); 
+}
+
+function downloadFile(name,content){ const a = document.createElement('a'); a.href = 'data:text/plain;charset=utf-8,' + encodeURIComponent(content); a.download = name; a.click(); }
+
+// require auth
+function requireAuth(){ if(!localStorage.getItem('foci_logged')){ alert('Jelentkezz be adminként!'); return false; } return true; }
+
+// on storage event -> reload db and UI (works cross-tab)
+window.addEventListener('storage', (e)=>{ if(e.key === STORAGE_KEY || e.key === null){ db = loadDB(); renderEditor(); }});
+function loadDB(){ const s = localStorage.getItem(STORAGE_KEY); if(!s) return {teams:[],groups:{},matches:{},knockout:[],final:null,settings:{autoAdvance:true},meta:{updated:null}}; try{return JSON.parse(s);}catch(e){return {teams:[],groups:{},matches:{},knockout:[],final:null,settings:{autoAdvance:true},meta:{updated:null}};} }
+db = loadDB();
+renderEditor();
+
+// utility: when page loads, if logged in set state
+if(localStorage.getItem('foci_logged')){ applyAuthState(); } // keep editing on reload
+
+</script>
+</body>
+</html>
